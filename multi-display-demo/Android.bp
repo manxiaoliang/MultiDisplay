@@ -1,0 +1,38 @@
+cc_defaults {
+    name: "MultiDisplayDemo_defaults",
+
+    cflags: [
+        "-Wall",
+        "-Werror",
+        "-Wunused",
+        "-Wunreachable-code",
+    ],
+
+    shared_libs: [
+        "libbase",
+        "libbinder",
+        "libcutils",
+        "liblog",
+        "libutils",
+        "libui",
+        "libgui",
+        "libEGL",
+        "libGLESv1_CM",
+    ],
+}
+
+// MultiDisplayDemo executable
+// =========================================================
+
+cc_binary {
+    name: "MultiDisplayDemo",
+    defaults: ["MultiDisplayDemo_defaults"],
+    srcs: [
+        "MultiDisplayNS.cpp",
+        "MultiDisplayDemo.cpp",
+    ],
+
+    cflags: [
+        "-Wno-deprecated-declarations",
+    ],
+}
