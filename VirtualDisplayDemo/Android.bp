@@ -33,6 +33,8 @@ cc_binary {
 
     cflags: [
         "-Wno-deprecated-declarations",
+        "-Wno-unused-result",
+        "-Wno-error",
     ],
 }
 

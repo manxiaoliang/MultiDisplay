@@ -76,7 +76,7 @@ int main(int argc, char **argv) {
             .apply();
 
     mVirtualDisplay =
-            SurfaceComposerClient::createDisplay(String8("Super-VirtualDisplay"), false /*secure*/);
+            SurfaceComposerClient::createVirtualDisplay(std::string("Super-VirtualDisplay"), false /*secure*/);
     SurfaceComposerClient::Transaction t;
     t.setDisplaySurface(mVirtualDisplay, mSurfaceControl->getIGraphicBufferProducer());
     t.setDisplayLayerStack(mVirtualDisplay, ui::LayerStack::fromValue(0));
@@ -103,7 +103,7 @@ int main(int argc, char **argv) {
     getchar();
     fprintf(stderr, "Exit and destroy Virtual Display\n");
 
-    SurfaceComposerClient::destroyDisplay(mVirtualDisplay);
+    SurfaceComposerClient::destroyVirtualDisplay(mVirtualDisplay);
 
     return 0;
 }
