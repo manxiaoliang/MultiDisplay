@@ -29,6 +29,7 @@ cc_binary {
     defaults: ["VirtualDisplayDemo_defaults"],
     srcs: [
         "VirtualDisplayDemo.cpp",
+        "VirtualDisplayView.cpp",
     ],
 
     cflags: [

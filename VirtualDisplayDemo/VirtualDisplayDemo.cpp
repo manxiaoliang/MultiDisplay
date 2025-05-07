@@ -1,46 +1,57 @@
 #define LOG_TAG "VirtualDisplay"
 
-#include <android/gui/ISurfaceComposerClient.h>
-#include <binder/IPCThreadState.h>
-#include <binder/ProcessState.h>
-#include <binder/IServiceManager.h>
-#include <gui/BLASTBufferQueue.h>
-#include <gui/Surface.h>
-#include <gui/SurfaceComposerClient.h>
-#include <hardware/gralloc.h>
-#include <ui/DisplayState.h>
-#include <ui/GraphicBuffer.h>
-#include <ui/DisplayState.h>
-#include <utils/Log.h>
+#include "VirtualDisplayView.h"
 
 using namespace android;
 
-ui::DisplayState mMainDisplayState;
-ui::DisplayMode mMainDisplayMode;
-sp<IBinder> mMainDisplay;
-sp<IBinder> mVirtualDisplay;
-sp<SurfaceControl> mSurfaceControl;
-const int mVirtualDisplayLayerStack = 99; 
-bool mEnableMirrorDisplay = false;
+class VirtualDisplayThread : public Thread
+{
+public:
+    VirtualDisplayThread(const sp<VirtualDisplayView> &wb)
+            : Thread(false), mVirtualDisplay(wb) {}
+    virtual void onFirstRef() {
+        run("RenderThread", PRIORITY_DISPLAY);
+    }
+    virtual bool threadLoop();
+private:
+    wp<VirtualDisplayView> mVirtualDisplay;
+};
+
+
+bool VirtualDisplayThread::threadLoop() {
+ 
+    return true; // loop until we need to quit
+}
 
 static void usage(const char *me)
 {
     fprintf(stderr, "\nusage: \t%s [options]\n"
-                    "\t--------------------------------------- options ------------------------------------------------\n"
-                    "\t[-h] help\n"
-                    "\t[-m] enable mirror main display\n"
-                    "\t------------------------------------------------------------------------------------------------\n",
+                    "\t------------- options ----------------\n"
+                    "\t[-s] source display layerstack\n"
+                    "\t[-d] destination display layerstack\n"
+                    "\t[ps] VirtualDisplayDemo -s 0 -d 2\n"
+                    "\n"
+                    "\t q to exit VirtualDisplayDemo\n"
+                    "\t--------------------------------------\n",
                     me);
     exit(1);
 }
 
+int mSrcDisplay = 0;
+int mDesDisplay = 2;
+
 void parseOptions(int argc, char **argv) {
     const char *me = argv[0];
     int res;
-    while((res = getopt(argc, argv, "mh")) >= 0) {
+    while((res = getopt(argc, argv, "s:d:h")) >= 0) {
         switch(res) {
-            case 'm':
-                mEnableMirrorDisplay = true;
+            case 's':
+                mSrcDisplay = atoi(optarg);
+                printf("opt is s, oprarg is: %s\n", optarg);
+                break;
+            case 'd':
+                mDesDisplay = atoi(optarg);
+                printf("opt is t, oprarg is: %s\n", optarg);
                 break;
             case 'h':
             default:
@@ -52,58 +63,22 @@ void parseOptions(int argc, char **argv) {
 }
 
 int main(int argc, char **argv) {
+    if(argc == 1) usage(argv[0]);
     parseOptions(argc, argv);
 
-    const auto ids = SurfaceComposerClient::getPhysicalDisplayIds();
-    mMainDisplay = SurfaceComposerClient::getPhysicalDisplayToken(ids.front());
-    SurfaceComposerClient::getDisplayState(mMainDisplay, &mMainDisplayState);
-    SurfaceComposerClient::getActiveDisplayMode(mMainDisplay, &mMainDisplayMode);
+    ALOGI("mSrcDisplayLayerStack: %d, mDesDisplayLayerStack: %d", mSrcDisplay,mDesDisplay);
+    printf("mSrcDisplayLayerStack: %d, mDesDisplayLayerStack: %d", mSrcDisplay,mDesDisplay);
+    
+    sp<VirtualDisplayView> virtualDisplayView(new VirtualDisplayView(mSrcDisplay,mDesDisplay));
+    sp<VirtualDisplayThread> virtualDisplayThread = new VirtualDisplayThread(virtualDisplayView);
 
-    // 创建Surface用于显示虚拟屏幕的内容
-    mSurfaceControl = SurfaceComposerClient::getDefault()->createSurface(String8("VirtualDisplay-Surface"), 
-                                                                  mMainDisplayMode.resolution.getWidth()/2, 
-                                                                  mMainDisplayMode.resolution.getHeight()/2,
-                                                                  PIXEL_FORMAT_RGBA_8888,
-                                                                  ISurfaceComposerClient::eFXSurfaceBufferState,
-                                                                  /*parent*/ nullptr);
-
-    SurfaceComposerClient::Transaction()
-            .setLayer(mSurfaceControl, std::numeric_limits<int32_t>::max())
-            // .setLayerStack(mSurfaceControl, ui::DEFAULT_LAYER_STACK)
-            .setLayerStack(mSurfaceControl, ui::LayerStack::fromValue(2))
-            .setPosition(mSurfaceControl, 0, 0)
-            .show(mSurfaceControl)
-            .apply();
-
-    mVirtualDisplay =
-            SurfaceComposerClient::createVirtualDisplay(std::string("Super-VirtualDisplay"), false /*secure*/);
-    SurfaceComposerClient::Transaction t;
-    t.setDisplaySurface(mVirtualDisplay, mSurfaceControl->getIGraphicBufferProducer());
-    t.setDisplayLayerStack(mVirtualDisplay, ui::LayerStack::fromValue(0));
-    t.setDisplayProjection(mVirtualDisplay, ui::ROTATION_0,
-                           Rect(mMainDisplayState.layerStackSpaceRect), 
-                           Rect(0, 0, mMainDisplayMode.resolution.getWidth()/2, mMainDisplayMode.resolution.getHeight()/2));
-    t.apply(true);
-
-    sp<SurfaceControl> mirrorRoot;
-    if(mEnableMirrorDisplay) {
-        // 创建主屏幕的镜像 mirrorRoot
-        mirrorRoot = SurfaceComposerClient::getDefault()->mirrorDisplay(ids.front());
-        if (mirrorRoot == nullptr) {
-            fprintf(stderr, "Failed to create a mirror for VirtualDisplayDemo");
-            return -1;
-        }
-        // 将mirrorRoot显示到虚拟屏幕上，也就时虚拟屏幕和主屏幕显示同样内容
-        t.setLayerStack(mirrorRoot, ui::LayerStack::fromValue(mVirtualDisplayLayerStack));
-        t.apply();
+    bool quit = false;
+    while(virtualDisplayThread->isRunning() && !quit) {
+        char input = getchar();
+        if(input == 'q')
+            quit = true;
     }
-
-    fprintf(stderr, "Create Virtual Display(layer_stack=%d)\n", mVirtualDisplayLayerStack);
-    fprintf(stderr, "Press any key to exit, waiting ...\n");
-    getchar();
-    fprintf(stderr, "Exit and destroy Virtual Display\n");
-
-    SurfaceComposerClient::destroyVirtualDisplay(mVirtualDisplay);
+    virtualDisplayThread->requestExitAndWait();
 
     return 0;
 }
